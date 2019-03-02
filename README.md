@@ -1,29 +1,40 @@
 # Multi output plugin for Embulk
 
-TODO: Write short description here and build.gradle file.
+This plugin can copies an output to multiple destinations.
 
 ## Overview
 
 * **Plugin type**: output
 * **Load all or nothing**: no
-* **Resume supported**: no
+* **Resume supported**: yes
 * **Cleanup supported**: yes
 
 ## Configuration
 
-- **option1**: description (integer, required)
-- **option2**: description (string, default: `"myvalue"`)
-- **option3**: description (string, default: `null`)
+- **outputs**: Configuration of output plugins (array, required)
 
 ## Example
 
 ```yaml
 out:
-  type: multi
-  option1: example1
-  option2: example2
+  type: copy
+  outputs:
+    # Output to stdout
+    - type: stdout
+    # Output to file as CSV
+    - type: file
+      path_prefix: out_file_
+      file_ext: csv
+      formatter:
+        type: csv
+    # Output to file as TSV
+    - type: file
+      path_prefix: out_file_
+      file_ext: tsv
+      formatter:
+        type: csv
+        delimiter: "\t"
 ```
-
 
 ## Build
 

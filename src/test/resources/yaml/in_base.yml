@@ -1,0 +1,8 @@
+type: config
+columns:
+  - {name: id, type: long}
+  - {name: name, type: string}
+  - {name: age, type: long}
+values:
+  - - [1, "user1", 20]
+  - - [2, "user2", 21]

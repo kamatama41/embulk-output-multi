@@ -9,6 +9,12 @@ repositories {
     maven { url 'http://kamatama41.github.com/maven-repository/repository' }
 }
 
+configurations {
+    [compileClasspath, testCompileClasspath].each {
+        it.resolutionStrategy.activateDependencyLocking()
+    }
+}
+
 dependencies {
     testImplementation "org.embulk:embulk-standards:0.9.15"
     testImplementation "org.embulk:embulk-test:0.9.15"

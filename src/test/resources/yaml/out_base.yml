@@ -1,0 +1,7 @@
+type: multi
+outputs:
+  - type: stdout
+    prints_column_names: true
+  - type: local_object
+    incremental: true
+    incremental_column: id

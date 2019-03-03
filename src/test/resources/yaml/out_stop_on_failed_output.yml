@@ -1,0 +1,9 @@
+type: multi
+outputs:
+  - type: throw_exception
+    thrown_on: ADD
+    source:
+      type: stdout
+  - type: local_object
+    incremental: true
+    incremental_column: id

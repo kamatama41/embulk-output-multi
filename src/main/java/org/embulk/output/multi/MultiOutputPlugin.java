@@ -39,6 +39,10 @@ public class MultiOutputPlugin implements OutputPlugin {
         @Config("outputs")
         List<ConfigSource> getOutputConfigs();
 
+        @Config("stop_on_failed_output")
+        @ConfigDefault("false")
+        boolean getStopOnFailedOutput();
+
         @Config(CONFIG_NAME_OUTPUT_CONFIG_DIFFS)
         @ConfigDefault("null")
         Optional<List<ConfigDiff>> getOutputConfigDiffs();
@@ -95,8 +99,8 @@ public class MultiOutputPlugin implements OutputPlugin {
     public TransactionalPageOutput open(TaskSource taskSource, Schema schema, int taskIndex) {
         final PluginTask task = taskSource.loadTask(PluginTask.class);
         final ExecSession session = Exec.session();
-        final List<TransactionalPageOutput> delegates = mapWithPluginDelegate(task, session, delegate ->
-                delegate.open(schema, taskIndex)
+        final List<TransactionalPageOutputDelegate> delegates = mapWithPluginDelegate(task, session, delegate ->
+                new TransactionalPageOutputDelegate(delegate, delegate.open(schema, taskIndex), task.getStopOnFailedOutput())
         );
 
         return new TransactionalPageOutput() {
@@ -264,6 +268,68 @@ public class MultiOutputPlugin implements OutputPlugin {
 
         private String getPluginNameForLogging() {
             return String.format("%s output plugin (pluginIndex: %s)", type.getName(), pluginIndex);
+        }
+    }
+
+    private static class TransactionalPageOutputDelegate implements TransactionalPageOutput {
+        private final OutputPluginDelegate source;
+        private final TransactionalPageOutput delegate;
+        private final boolean isStopOnFailedOutput;
+
+        TransactionalPageOutputDelegate(
+                OutputPluginDelegate source, TransactionalPageOutput delegate, boolean isStopOnFailedOutput) {
+            this.source = source;
+            this.delegate = delegate;
+            this.isStopOnFailedOutput = isStopOnFailedOutput;
+        }
+
+        @Override
+        public void add(Page page) {
+            try {
+                delegate.add(page);
+            } catch (Exception e) {
+                warnOrException(e);
+            }
+        }
+
+        @Override
+        public void finish() {
+            try {
+                delegate.finish();
+            } catch (Exception e) {
+                warnOrException(e);
+            }
+        }
+
+        @Override
+        public void close() {
+            try {
+                delegate.close();
+            } catch (Exception e) {
+                warnOrException(e);
+            }
+        }
+
+        @Override
+        public void abort() {
+            try {
+                delegate.abort();
+            } catch (Exception e) {
+                warnOrException(e);
+            }
+        }
+
+        @Override
+        public TaskReport commit() {
+            return delegate.commit();
+        }
+
+        private void warnOrException(Exception e) {
+            final String message = String.format("Failed on output for %s.", source.getPluginNameForLogging());
+            if (isStopOnFailedOutput) {
+                throw new RuntimeException(message, e);
+            }
+            LOGGER.warn(message);
         }
     }
 

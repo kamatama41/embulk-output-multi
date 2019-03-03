@@ -19,7 +19,7 @@ configurations {
 dependencies {
     testImplementation "org.embulk:embulk-standards:0.9.15"
     testImplementation "org.embulk:embulk-test:0.9.15"
-    testImplementation "com.github.kamatama41:embulk-test-helpers:0.7.1"
+    testImplementation "com.github.kamatama41:embulk-test-helpers:0.7.2"
     testImplementation "org.junit.jupiter:junit-jupiter-api:5.3.2"
     testImplementation "org.junit.jupiter:junit-jupiter-engine:5.3.2"
 }

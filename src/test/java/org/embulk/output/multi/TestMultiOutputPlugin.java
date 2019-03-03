@@ -1,6 +1,7 @@
 package org.embulk.output.multi;
 
 import org.embulk.config.ConfigSource;
+import org.embulk.exec.PartialExecutionException;
 import org.embulk.test.EmbulkPluginTest;
 import org.embulk.test.EmbulkTest;
 import org.embulk.test.Record;
@@ -22,6 +23,9 @@ import static org.embulk.test.LocalObjectOutputPlugin.assertRecords;
 import static org.embulk.test.Utils.configFromResource;
 import static org.embulk.test.Utils.record;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.fail;
 
 @EmbulkTest(MultiOutputPlugin.class)
 class TestMultiOutputPlugin extends EmbulkPluginTest {
@@ -109,6 +113,53 @@ class TestMultiOutputPlugin extends EmbulkPluginTest {
         // Only 1 records (id=4) should be loaded.
         final Record[] records = toRecords(values);
         assertRecords(records[3]);
+    }
+
+    @Test
+    void testStopOnFailedOutputIsFalse() throws IOException {
+        final ConfigSource inConfig = configFromResource("yaml/in_base.yml");
+        final ConfigSource outConfig = configFromResource("yaml/out_stop_on_failed_output.yml");
+        final ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+        System.setOut(new PrintStream(outputStream));
+
+        // Run Embulk without error
+        runOutput(inConfig, outConfig);
+
+        // All records should be loaded for local_object output plugin.
+        final Record[] values = new Record[]{record(1, "user1", 20), record(2, "user2", 21)};
+        assertRecords(values);
+
+        // No record should be loaded for stdout output plugin
+        final BufferedReader reader = new BufferedReader(
+                new InputStreamReader(new ByteArrayInputStream(outputStream.toByteArray()))
+        );
+        assertNull(reader.readLine());
+    }
+
+    @Test
+    void testStopOnFailedOutputIsTrue() throws IOException {
+        final ConfigSource inConfig = configFromResource("yaml/in_base.yml");
+        final ConfigSource outConfig = configFromResource("yaml/out_stop_on_failed_output.yml")
+                .set("stop_on_failed_output", true);
+        final ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+        System.setOut(new PrintStream(outputStream));
+
+        // Run Embulk
+        try {
+            runOutput(inConfig, outConfig);
+            fail("No exception");
+        } catch (PartialExecutionException e) {
+            assertTrue(e.getMessage().contains("Failed on output for throw_exception output plugin (pluginIndex: 0)"));
+        }
+
+        // No record should be loaded for local_object output plugin.
+        assertRecords();
+
+        // No record should be loaded for stdout output plugin
+        final BufferedReader reader = new BufferedReader(
+                new InputStreamReader(new ByteArrayInputStream(outputStream.toByteArray()))
+        );
+        assertNull(reader.readLine());
     }
 
     private static Object[][][] generateValues(int size) {

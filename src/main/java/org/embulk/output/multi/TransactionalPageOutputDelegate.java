@@ -82,8 +82,7 @@ class TransactionalPageOutputDelegate {
         @Override
         public TaskReport call() throws InterruptedException {
             while (true) {
-                final Supplier<Object> task = taskQueue.take();
-                final Object result = task.get();
+                final Object result = taskQueue.take().get();
                 if (result instanceof TaskReport) {
                     return (TaskReport) result;
                 }

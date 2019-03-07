@@ -15,7 +15,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicReferenceArray;
 
-class RunControlTask implements Callable<List<TaskReport>> {
+class AsyncRunControl {
     private static final String THREAD_NAME_FORMAT = "multi-run-control-%d";
     private final MultiOutputPlugin.PluginTask task;
     private final OutputPlugin.Control control;
@@ -24,7 +24,11 @@ class RunControlTask implements Callable<List<TaskReport>> {
     private final ExecutorService executorService;
     private Future<List<TaskReport>> result;
 
-    RunControlTask(MultiOutputPlugin.PluginTask task, OutputPlugin.Control control) {
+    static AsyncRunControl start(MultiOutputPlugin.PluginTask task, OutputPlugin.Control control) {
+        return new AsyncRunControl(task, control).start();
+    }
+
+    private AsyncRunControl(MultiOutputPlugin.PluginTask task, OutputPlugin.Control control) {
         this.task = task;
         this.control = control;
         this.latch = new CountDownLatch(task.getOutputConfigs().size());
@@ -32,18 +36,6 @@ class RunControlTask implements Callable<List<TaskReport>> {
         this.executorService = Executors.newSingleThreadExecutor(
                 new ThreadFactoryBuilder().setNameFormat(THREAD_NAME_FORMAT).build()
         );
-        this.result = executorService.submit(this);
-    }
-
-    @Override
-    public List<TaskReport> call() throws Exception {
-        latch.await();
-        List<TaskSource> taskSources = new ArrayList<>(this.taskSources.length());
-        for (int i = 0; i < this.taskSources.length(); i++) {
-            taskSources.add(this.taskSources.get(i));
-        }
-        task.setTaskSources(taskSources);
-        return control.run(task.dump());
     }
 
     void cancel() {
@@ -60,6 +52,24 @@ class RunControlTask implements Callable<List<TaskReport>> {
             return result.get();
         } finally {
             executorService.shutdown();
+        }
+    }
+
+    private AsyncRunControl start() {
+        this.result = executorService.submit(new RunControl());
+        return this;
+    }
+
+    private class RunControl implements Callable<List<TaskReport>> {
+        @Override
+        public List<TaskReport> call() throws Exception {
+            latch.await();
+            List<TaskSource> taskSources = new ArrayList<>(AsyncRunControl.this.taskSources.length());
+            for (int i = 0; i < AsyncRunControl.this.taskSources.length(); i++) {
+                taskSources.add(AsyncRunControl.this.taskSources.get(i));
+            }
+            task.setTaskSources(taskSources);
+            return control.run(task.dump());
         }
     }
 }

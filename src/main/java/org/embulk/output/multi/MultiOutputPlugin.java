@@ -48,9 +48,9 @@ public class MultiOutputPlugin implements OutputPlugin {
             throw new ConfigException("'outputs' must have more than than or equals to 1 element.");
         }
         final ExecSession session = Exec.session();
-        final RunControlTask controlTask = new RunControlTask(task, control);
+        final AsyncRunControl runControl = AsyncRunControl.start(task, control);
         return buildConfigDiff(mapWithPluginDelegate(task, session, delegate ->
-                delegate.transaction(schema, taskCount, controlTask)
+                delegate.transaction(schema, taskCount, runControl)
         ));
     }
 
@@ -58,9 +58,9 @@ public class MultiOutputPlugin implements OutputPlugin {
     public ConfigDiff resume(TaskSource taskSource, Schema schema, int taskCount, OutputPlugin.Control control) {
         final PluginTask task = taskSource.loadTask(PluginTask.class);
         final ExecSession session = Exec.session();
-        final RunControlTask controlTask = new RunControlTask(task, control);
+        final AsyncRunControl runControl = AsyncRunControl.start(task, control);
         return buildConfigDiff(mapWithPluginDelegate(task, session, delegate ->
-                delegate.resume(schema, taskCount, controlTask)
+                delegate.resume(schema, taskCount, runControl)
         ));
     }
 

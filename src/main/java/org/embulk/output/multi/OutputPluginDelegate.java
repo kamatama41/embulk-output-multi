@@ -15,6 +15,7 @@ import org.slf4j.LoggerFactory;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CancellationException;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
@@ -46,17 +47,17 @@ class OutputPluginDelegate {
         );
     }
 
-    Future<ConfigDiff> transaction(Schema schema, int taskCount, RunControlTask controlTask) {
+    Future<ConfigDiff> transaction(Schema schema, int taskCount, AsyncRunControl runControl) {
         return executorService.submit(() -> {
             try {
                 LOGGER.debug("Run #transaction for {}", getPluginCode());
-                return plugin.transaction(config, schema, taskCount, new ControlDelegate(pluginIndex, controlTask));
+                return plugin.transaction(config, schema, taskCount, new Control(pluginIndex, runControl));
             } catch (CancellationException e) {
                 LOGGER.error("Canceled #transaction for {} by other plugin's error", getPluginCode());
                 throw e;
             } catch (Exception e) {
                 LOGGER.error("Transaction for {} failed.", getPluginCode(), e);
-                controlTask.cancel();
+                runControl.cancel();
                 throw e;
             } finally {
                 executorService.shutdown();
@@ -64,17 +65,17 @@ class OutputPluginDelegate {
         });
     }
 
-    Future<ConfigDiff> resume(Schema schema, int taskCount, RunControlTask controlTask) {
+    Future<ConfigDiff> resume(Schema schema, int taskCount, AsyncRunControl runControl) {
         return executorService.submit(() -> {
             try {
                 LOGGER.debug("Run #resume for {}", getPluginCode());
-                return plugin.resume(taskSource, schema, taskCount, new ControlDelegate(pluginIndex, controlTask));
+                return plugin.resume(taskSource, schema, taskCount, new Control(pluginIndex, runControl));
             } catch (CancellationException e) {
                 LOGGER.error("Canceled #resume for {} by other plugin's error", getPluginCode());
                 throw e;
             } catch (Exception e) {
                 LOGGER.error("Resume for {} failed.", getPluginCode(), e);
-                controlTask.cancel();
+                runControl.cancel();
                 throw e;
             } finally {
                 executorService.shutdown();
@@ -107,5 +108,36 @@ class OutputPluginDelegate {
 
     private static String generatePluginCode(PluginType type, int pluginIndex) {
         return String.format("%s-%d", type.getName(), pluginIndex);
+    }
+
+    private static class Control implements OutputPlugin.Control {
+        private final int pluginIndex;
+        private final AsyncRunControl runControl;
+
+        Control(int index, AsyncRunControl runControl) {
+            this.pluginIndex = index;
+            this.runControl = runControl;
+        }
+
+        @Override
+        public List<TaskReport> run(TaskSource taskSource) {
+            runControl.addTaskSource(pluginIndex, taskSource);
+            List<TaskReport> reports;
+            try {
+                reports = runControl.waitAndGetResult();
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new RuntimeException(e);
+            } catch (ExecutionException e) {
+                throw new RuntimeException(e.getCause());
+            }
+
+            final List<TaskReport> result = new ArrayList<>();
+            for (TaskReport taskReport : reports) {
+                final TaskReport report = taskReport.get(TaskReports.class, MultiOutputPlugin.CONFIG_NAME_OUTPUT_TASK_REPORTS).get(pluginIndex);
+                result.add(report);
+            }
+            return result;
+        }
     }
 }

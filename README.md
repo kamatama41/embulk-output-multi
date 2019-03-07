@@ -18,7 +18,6 @@ This plugin can copies an output to multiple destinations.
 ## Configuration
 
 - **outputs**: Configuration of output plugins (array, required)
-- **stop_on_failed_output**: Set true if you want to immediately stop outputting of all plugins with a plugin's error (boolean, default "false")
 
 ## Example
 

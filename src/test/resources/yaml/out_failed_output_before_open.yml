@@ -1,0 +1,13 @@
+type: multi
+outputs:
+  - type: throw_exception
+    thrown_on: COMMIT
+    source:
+      type: stdout
+  - type: local_object
+    incremental: true
+    incremental_column: id
+  - type: throw_exception
+    thrown_on: BEFORE_TRANSACTION
+    source:
+      type: stdout

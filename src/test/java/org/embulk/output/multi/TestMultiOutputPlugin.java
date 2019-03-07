@@ -25,7 +25,6 @@ import static org.embulk.test.Utils.record;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.junit.jupiter.api.Assertions.fail;
 
 @EmbulkTest(MultiOutputPlugin.class)
 class TestMultiOutputPlugin extends EmbulkPluginTest {
@@ -116,14 +115,16 @@ class TestMultiOutputPlugin extends EmbulkPluginTest {
     }
 
     @Test
-    void testStopOnFailedOutputIsFalse() throws IOException {
+    void testAnOutputFailedFailedAfterOpen() throws IOException {
         final ConfigSource inConfig = configFromResource("yaml/in_base.yml");
-        final ConfigSource outConfig = configFromResource("yaml/out_stop_on_failed_output.yml");
+        final ConfigSource outConfig = configFromResource("yaml/out_failed_output_after_open.yml");
         final ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
         System.setOut(new PrintStream(outputStream));
 
         // Run Embulk without error
-        runOutput(inConfig, outConfig);
+        try {
+            runOutput(inConfig, outConfig);
+        } catch (PartialExecutionException ignored) {}
 
         // All records should be loaded for local_object output plugin.
         final Record[] values = new Record[]{record(1, "user1", 20), record(2, "user2", 21)};
@@ -137,20 +138,16 @@ class TestMultiOutputPlugin extends EmbulkPluginTest {
     }
 
     @Test
-    void testStopOnFailedOutputIsTrue() throws IOException {
+    void testAnOutputFailedFailedBeforeOpen() throws IOException {
         final ConfigSource inConfig = configFromResource("yaml/in_base.yml");
-        final ConfigSource outConfig = configFromResource("yaml/out_stop_on_failed_output.yml")
-                .set("stop_on_failed_output", true);
+        final ConfigSource outConfig = configFromResource("yaml/out_failed_output_before_open.yml");
         final ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
         System.setOut(new PrintStream(outputStream));
 
-        // Run Embulk
+        // Run Embulk without error
         try {
             runOutput(inConfig, outConfig);
-            fail("No exception");
-        } catch (PartialExecutionException e) {
-            assertTrue(e.getMessage().contains("Failed on output for throw_exception output plugin (pluginIndex: 0)"));
-        }
+        } catch (PartialExecutionException ignored) {}
 
         // No record should be loaded for local_object output plugin.
         assertRecords();

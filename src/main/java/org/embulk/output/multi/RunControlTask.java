@@ -5,7 +5,7 @@ import org.embulk.config.TaskReport;
 import org.embulk.config.TaskSource;
 import org.embulk.spi.OutputPlugin;
 
-import java.util.Arrays;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CountDownLatch;
@@ -13,13 +13,14 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.atomic.AtomicReferenceArray;
 
 class RunControlTask implements Callable<List<TaskReport>> {
     private static final String THREAD_NAME_FORMAT = "multi-run-control-%d";
     private final MultiOutputPlugin.PluginTask task;
     private final OutputPlugin.Control control;
     private final CountDownLatch latch;
-    private final TaskSource[] taskSources;
+    private final AtomicReferenceArray<TaskSource> taskSources;
     private final ExecutorService executorService;
     private Future<List<TaskReport>> result;
 
@@ -27,7 +28,7 @@ class RunControlTask implements Callable<List<TaskReport>> {
         this.task = task;
         this.control = control;
         this.latch = new CountDownLatch(task.getOutputConfigs().size());
-        this.taskSources = new TaskSource[task.getOutputConfigs().size()];
+        this.taskSources = new AtomicReferenceArray<>(task.getOutputConfigs().size());
         this.executorService = Executors.newSingleThreadExecutor(
                 new ThreadFactoryBuilder().setNameFormat(THREAD_NAME_FORMAT).build()
         );
@@ -37,7 +38,11 @@ class RunControlTask implements Callable<List<TaskReport>> {
     @Override
     public List<TaskReport> call() throws Exception {
         latch.await();
-        task.setTaskSources(Arrays.asList(taskSources));
+        List<TaskSource> taskSources = new ArrayList<>(this.taskSources.length());
+        for (int i = 0; i < this.taskSources.length(); i++) {
+            taskSources.add(this.taskSources.get(i));
+        }
+        task.setTaskSources(taskSources);
         return control.run(task.dump());
     }
 
@@ -46,7 +51,7 @@ class RunControlTask implements Callable<List<TaskReport>> {
     }
 
     void addTaskSource(int index, TaskSource taskSource) {
-        taskSources[index] = taskSource;
+        taskSources.set(index, taskSource);
         latch.countDown();
     }
 

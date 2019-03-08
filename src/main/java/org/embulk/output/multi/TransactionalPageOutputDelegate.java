@@ -31,7 +31,7 @@ class TransactionalPageOutputDelegate {
         this.delegate = delegate;
         this.taskQueue = new LinkedBlockingQueue<>();
         this.executorService = Executors.newSingleThreadExecutor(
-                new ThreadFactoryBuilder().setNameFormat(String.format(THREAD_NAME_FORMAT, source.getPluginCode(), taskIndex)).build()
+                new ThreadFactoryBuilder().setNameFormat(String.format(THREAD_NAME_FORMAT, source.getTag(), taskIndex)).build()
         );
         this.result = executorService.submit(new Worker());
     }
@@ -76,6 +76,10 @@ class TransactionalPageOutputDelegate {
         } finally {
             executorService.shutdown();
         }
+    }
+
+    String getTag() {
+        return source.getTag();
     }
 
     private class Worker implements Callable<TaskReport> {

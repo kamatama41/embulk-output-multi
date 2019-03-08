@@ -4,22 +4,22 @@ import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import org.embulk.config.TaskReport;
 
-import java.util.List;
+import java.util.Map;
 
 class TaskReports {
-    private final List<TaskReport> reports;
+    private final Map<String, TaskReport> reports;
 
     @JsonCreator
-    TaskReports(@JsonProperty("reports") List<TaskReport> reports) {
+    TaskReports(@JsonProperty("reports") Map<String, TaskReport> reports) {
         this.reports = reports;
     }
 
     @JsonProperty("reports")
-    List<TaskReport> getReports() {
+    Map<String, TaskReport> getReports() {
         return reports;
     }
 
-    TaskReport get(int index) {
-        return reports.get(index);
+    TaskReport get(String tag) {
+        return reports.get(tag);
     }
 }

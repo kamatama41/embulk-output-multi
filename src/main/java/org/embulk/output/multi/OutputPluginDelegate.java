@@ -5,7 +5,6 @@ import org.embulk.config.ConfigDiff;
 import org.embulk.config.ConfigSource;
 import org.embulk.config.TaskReport;
 import org.embulk.config.TaskSource;
-import org.embulk.plugin.PluginType;
 import org.embulk.spi.OutputPlugin;
 import org.embulk.spi.Schema;
 import org.embulk.spi.TransactionalPageOutput;
@@ -23,105 +22,92 @@ import java.util.concurrent.Future;
 class OutputPluginDelegate {
     private static final Logger LOGGER = LoggerFactory.getLogger(OutputPluginDelegate.class);
     private static final String THREAD_NAME_FORMAT = "multi-output-plugin-%s-%%d";
-    private final int pluginIndex;
-    private final PluginType type;
+    private final String tag;
     private final OutputPlugin plugin;
     private final ConfigSource config;
     private final TaskSource taskSource;
     private final ExecutorService executorService;
 
     OutputPluginDelegate(
-            int pluginIndex,
-            PluginType type,
+            String tag,
             OutputPlugin plugin,
             ConfigSource config,
             TaskSource taskSource
     ) {
-        this.pluginIndex = pluginIndex;
-        this.type = type;
+        this.tag = tag;
         this.plugin = plugin;
         this.config = config;
         this.taskSource = taskSource;
         this.executorService = Executors.newSingleThreadExecutor(
-                new ThreadFactoryBuilder().setNameFormat(String.format(THREAD_NAME_FORMAT, generatePluginCode(type, pluginIndex))).build()
+                new ThreadFactoryBuilder().setNameFormat(String.format(THREAD_NAME_FORMAT, tag)).build()
         );
     }
 
-    Future<ConfigDiff> transaction(Schema schema, int taskCount, AsyncRunControl runControl) {
-        return executorService.submit(() -> {
+    Transaction transaction(Schema schema, int taskCount, AsyncRunControl runControl) {
+        return new Transaction(executorService.submit(() -> {
             try {
-                LOGGER.debug("Run #transaction for {}", getPluginCode());
-                return plugin.transaction(config, schema, taskCount, new Control(pluginIndex, runControl));
+                LOGGER.debug("Run #transaction for {}", getTag());
+                return plugin.transaction(config, schema, taskCount, new Control(runControl));
             } catch (CancellationException e) {
-                LOGGER.error("Canceled #transaction for {} by other plugin's error", getPluginCode());
+                LOGGER.error("Canceled #transaction for {} by other plugin's error", getTag());
                 throw e;
             } catch (Exception e) {
-                LOGGER.error("Transaction for {} failed.", getPluginCode(), e);
+                LOGGER.error("Transaction for {} failed.", getTag(), e);
                 runControl.cancel();
                 throw e;
             } finally {
                 executorService.shutdown();
             }
-        });
+        }));
     }
 
-    Future<ConfigDiff> resume(Schema schema, int taskCount, AsyncRunControl runControl) {
-        return executorService.submit(() -> {
+    Transaction resume(Schema schema, int taskCount, AsyncRunControl runControl) {
+        return new Transaction(executorService.submit(() -> {
             try {
-                LOGGER.debug("Run #resume for {}", getPluginCode());
-                return plugin.resume(taskSource, schema, taskCount, new Control(pluginIndex, runControl));
+                LOGGER.debug("Run #resume for {}", getTag());
+                return plugin.resume(taskSource, schema, taskCount, new Control(runControl));
             } catch (CancellationException e) {
-                LOGGER.error("Canceled #resume for {} by other plugin's error", getPluginCode());
+                LOGGER.error("Canceled #resume for {} by other plugin's error", getTag());
                 throw e;
             } catch (Exception e) {
-                LOGGER.error("Resume for {} failed.", getPluginCode(), e);
+                LOGGER.error("Resume for {} failed.", getTag(), e);
                 runControl.cancel();
                 throw e;
             } finally {
                 executorService.shutdown();
             }
-        });
+        }));
     }
 
     void cleanup(Schema schema, int taskCount, List<TaskReport> successTaskReports) {
-        LOGGER.debug("Run #cleanup for {}", getPluginCode());
+        LOGGER.debug("Run #cleanup for {}", getTag());
         List<TaskReport> successReportsForPlugin = new ArrayList<>();
         for (TaskReport successTaskReport : successTaskReports) {
-            final TaskReport report = successTaskReport.get(TaskReports.class, MultiOutputPlugin.CONFIG_NAME_OUTPUT_TASK_REPORTS).get(pluginIndex);
+            final TaskReport report = successTaskReport.get(TaskReports.class, MultiOutputPlugin.CONFIG_NAME_OUTPUT_TASK_REPORTS).get(tag);
             successReportsForPlugin.add(report);
         }
         plugin.cleanup(taskSource, schema, taskCount, successReportsForPlugin);
     }
 
     TransactionalPageOutput open(Schema schema, int taskIndex) {
-        LOGGER.debug("Run #open for {}", getPluginCode());
+        LOGGER.debug("Run #open for {}", getTag());
         return plugin.open(taskSource, schema, taskIndex);
     }
 
-    PluginType getType() {
-        return type;
+    String getTag() {
+        return tag;
     }
 
-    String getPluginCode() {
-        return generatePluginCode(type, pluginIndex);
-    }
-
-    private static String generatePluginCode(PluginType type, int pluginIndex) {
-        return String.format("%s-%d", type.getName(), pluginIndex);
-    }
-
-    private static class Control implements OutputPlugin.Control {
-        private final int pluginIndex;
+    private class Control implements OutputPlugin.Control {
         private final AsyncRunControl runControl;
 
-        Control(int index, AsyncRunControl runControl) {
-            this.pluginIndex = index;
+        Control(AsyncRunControl runControl) {
             this.runControl = runControl;
         }
 
         @Override
         public List<TaskReport> run(TaskSource taskSource) {
-            runControl.addTaskSource(pluginIndex, taskSource);
+            runControl.addTaskSource(tag, taskSource);
             List<TaskReport> reports;
             try {
                 reports = runControl.waitAndGetResult();
@@ -134,10 +120,26 @@ class OutputPluginDelegate {
 
             final List<TaskReport> result = new ArrayList<>();
             for (TaskReport taskReport : reports) {
-                final TaskReport report = taskReport.get(TaskReports.class, MultiOutputPlugin.CONFIG_NAME_OUTPUT_TASK_REPORTS).get(pluginIndex);
+                final TaskReport report = taskReport.get(TaskReports.class, MultiOutputPlugin.CONFIG_NAME_OUTPUT_TASK_REPORTS).get(tag);
                 result.add(report);
             }
             return result;
+        }
+    }
+
+    class Transaction {
+        private final Future<ConfigDiff> future;
+
+        private Transaction(Future<ConfigDiff> future) {
+            this.future = future;
+        }
+
+        String getTag() {
+            return OutputPluginDelegate.this.getTag();
+        }
+
+        ConfigDiff getResult() throws ExecutionException, InterruptedException {
+            return future.get();
         }
     }
 }

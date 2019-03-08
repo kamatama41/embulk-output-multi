@@ -16,12 +16,15 @@ import org.embulk.spi.OutputPlugin;
 import org.embulk.spi.Page;
 import org.embulk.spi.Schema;
 import org.embulk.spi.TransactionalPageOutput;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ExecutionException;
-import java.util.concurrent.Future;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -32,12 +35,13 @@ public class MultiOutputPlugin implements OutputPlugin {
 
         @Config(CONFIG_NAME_OUTPUT_CONFIG_DIFFS)
         @ConfigDefault("null")
-        Optional<List<ConfigDiff>> getOutputConfigDiffs();
+        Optional<Map<String, ConfigDiff>> getOutputConfigDiffs();
 
-        List<TaskSource> getTaskSources();
-        void setTaskSources(List<TaskSource> taskSources);
+        Map<String, TaskSource> getTaskSources();
+        void setTaskSources(Map<String, TaskSource> taskSources);
     }
 
+    private static final Logger LOGGER = LoggerFactory.getLogger(MultiOutputPlugin.class);
     private static final String CONFIG_NAME_OUTPUT_CONFIG_DIFFS = "output_config_diffs";
     static final String CONFIG_NAME_OUTPUT_TASK_REPORTS = "output_task_reports";
 
@@ -123,11 +127,11 @@ public class MultiOutputPlugin implements OutputPlugin {
             @Override
             public TaskReport commit() {
                 final TaskReport report = Exec.newTaskReport();
-                final List<TaskReport> reports = new ArrayList<>();
+                final Map<String, TaskReport> reports = new HashMap<>();
                 final List<OutputPluginDelegate> errorPlugins = new ArrayList<>();
                 for (TransactionalPageOutputDelegate output : delegates) {
                     try {
-                        reports.add(output.commit());
+                        reports.put(output.getTag(), output.commit());
                     } catch (PluginExecutionException e) {
                         errorPlugins.add(e.getPlugin());
                     }
@@ -135,7 +139,7 @@ public class MultiOutputPlugin implements OutputPlugin {
                 if (!errorPlugins.isEmpty()) {
                     throw new RuntimeException(
                             String.format("Following plugins failed to output [%s]",
-                                    errorPlugins.stream().map(OutputPluginDelegate::getPluginCode).collect(Collectors.joining(", "))
+                                    errorPlugins.stream().map(OutputPluginDelegate::getTag).collect(Collectors.joining(", "))
                             ));
                 }
                 report.set(CONFIG_NAME_OUTPUT_TASK_REPORTS, new TaskReports(reports));
@@ -144,12 +148,12 @@ public class MultiOutputPlugin implements OutputPlugin {
         };
     }
 
-    private static ConfigDiff buildConfigDiff(List<Future<ConfigDiff>> runPluginTasks) {
+    private static ConfigDiff buildConfigDiff(List<OutputPluginDelegate.Transaction> transactions) {
         final ConfigDiff configDiff = Exec.newConfigDiff();
-        List<ConfigDiff> configDiffs = new ArrayList<>();
-        for (Future<ConfigDiff> pluginTask : runPluginTasks) {
+        Map<String, ConfigDiff> configDiffs = new HashMap<>();
+        for (OutputPluginDelegate.Transaction transaction: transactions) {
             try {
-                configDiffs.add(pluginTask.get());
+                configDiffs.put(transaction.getTag(), transaction.getResult());
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
                 throw new RuntimeException(e);
@@ -163,18 +167,29 @@ public class MultiOutputPlugin implements OutputPlugin {
 
     private <T> List<T> mapWithPluginDelegate(PluginTask task, ExecSession session, Function<OutputPluginDelegate, T> action) {
         List<T> result = new ArrayList<>();
-        for (int pluginIndex = 0; pluginIndex < task.getOutputConfigs().size(); pluginIndex++) {
-            final ConfigSource config = task.getOutputConfigs().get(pluginIndex);
-            if (task.getOutputConfigDiffs().isPresent()) {
-                config.merge(task.getOutputConfigDiffs().get().get(pluginIndex));
-            }
+        for (int i = 0; i < task.getOutputConfigs().size(); i++) {
+            final ConfigSource config = task.getOutputConfigs().get(i);
             final PluginType pluginType = config.get(PluginType.class, "type");
             final OutputPlugin outputPlugin = session.newPlugin(OutputPlugin.class, pluginType);
+
+            final String tag = String.format("%s_%d", pluginType.getName(), i);
+
+            // Merge ConfigDiff if exists
+            if (task.getOutputConfigDiffs().isPresent()) {
+                final ConfigDiff configDiff = task.getOutputConfigDiffs().get().get(tag);
+                if (configDiff != null) {
+                    config.merge(configDiff);
+                } else {
+                    LOGGER.debug("ConfigDiff for '{}' not found.", tag);
+                }
+            }
+            // Set TaskSource if exists
             TaskSource taskSource = null;
             if (task.getTaskSources() != null) {
-                taskSource = task.getTaskSources().get(pluginIndex);
+                taskSource = task.getTaskSources().get(tag);
             }
-            result.add(action.apply(new OutputPluginDelegate(pluginIndex, pluginType, outputPlugin, config, taskSource)));
+
+            result.add(action.apply(new OutputPluginDelegate(tag, outputPlugin, config, taskSource)));
         }
         return result;
     }

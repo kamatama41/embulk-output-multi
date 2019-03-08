@@ -24,10 +24,10 @@ import static org.embulk.test.Utils.configFromResource;
 import static org.embulk.test.Utils.record;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @EmbulkTest(MultiOutputPlugin.class)
 class TestMultiOutputPlugin extends EmbulkPluginTest {
+
     @Test
     void testMultipleOutputWorking() throws IOException {
         final ConfigSource inConfig = configFromResource("yaml/in_base.yml");

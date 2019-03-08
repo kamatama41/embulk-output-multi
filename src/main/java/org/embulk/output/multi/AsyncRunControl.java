@@ -5,22 +5,22 @@ import org.embulk.config.TaskReport;
 import org.embulk.config.TaskSource;
 import org.embulk.spi.OutputPlugin;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.Callable;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
-import java.util.concurrent.atomic.AtomicReferenceArray;
 
 class AsyncRunControl {
     private static final String THREAD_NAME_FORMAT = "multi-run-control-%d";
     private final MultiOutputPlugin.PluginTask task;
     private final OutputPlugin.Control control;
     private final CountDownLatch latch;
-    private final AtomicReferenceArray<TaskSource> taskSources;
+    private final ConcurrentMap<String, TaskSource> taskSources;
     private final ExecutorService executorService;
     private Future<List<TaskReport>> result;
 
@@ -32,7 +32,7 @@ class AsyncRunControl {
         this.task = task;
         this.control = control;
         this.latch = new CountDownLatch(task.getOutputConfigs().size());
-        this.taskSources = new AtomicReferenceArray<>(task.getOutputConfigs().size());
+        this.taskSources = new ConcurrentHashMap<>(task.getOutputConfigs().size());
         this.executorService = Executors.newSingleThreadExecutor(
                 new ThreadFactoryBuilder().setNameFormat(THREAD_NAME_FORMAT).build()
         );
@@ -42,8 +42,8 @@ class AsyncRunControl {
         result.cancel(true);
     }
 
-    void addTaskSource(int index, TaskSource taskSource) {
-        taskSources.set(index, taskSource);
+    void addTaskSource(String tag, TaskSource taskSource) {
+        taskSources.putIfAbsent(tag, taskSource);
         latch.countDown();
     }
 
@@ -64,10 +64,6 @@ class AsyncRunControl {
         @Override
         public List<TaskReport> call() throws Exception {
             latch.await();
-            List<TaskSource> taskSources = new ArrayList<>(AsyncRunControl.this.taskSources.length());
-            for (int i = 0; i < AsyncRunControl.this.taskSources.length(); i++) {
-                taskSources.add(AsyncRunControl.this.taskSources.get(i));
-            }
             task.setTaskSources(taskSources);
             return control.run(task.dump());
         }

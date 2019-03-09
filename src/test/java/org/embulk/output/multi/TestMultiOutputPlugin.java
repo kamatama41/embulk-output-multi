@@ -115,7 +115,7 @@ class TestMultiOutputPlugin extends EmbulkPluginTest {
     }
 
     @Test
-    void testAnOutputFailedFailedAfterOpen() throws IOException {
+    void testAnOutputFailedAfterOpen() throws IOException {
         final ConfigSource inConfig = configFromResource("yaml/in_base.yml");
         final ConfigSource outConfig = configFromResource("yaml/out_failed_output_after_open.yml");
         final ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
@@ -138,7 +138,7 @@ class TestMultiOutputPlugin extends EmbulkPluginTest {
     }
 
     @Test
-    void testAnOutputFailedFailedBeforeOpen() throws IOException {
+    void testAnOutputFailedBeforeOpen() throws IOException {
         final ConfigSource inConfig = configFromResource("yaml/in_base.yml");
         final ConfigSource outConfig = configFromResource("yaml/out_failed_output_before_open.yml");
         final ByteArrayOutputStream outputStream = new ByteArrayOutputStream();

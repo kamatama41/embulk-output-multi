@@ -22,10 +22,10 @@ class AsyncRunControl {
     private final CountDownLatch latch;
     private final ConcurrentMap<String, TaskSource> taskSources;
     private final ExecutorService executorService;
-    private Future<List<TaskReport>> result;
+    private final Future<List<TaskReport>> result;
 
     static AsyncRunControl start(MultiOutputPlugin.PluginTask task, OutputPlugin.Control control) {
-        return new AsyncRunControl(task, control).start();
+        return new AsyncRunControl(task, control);
     }
 
     private AsyncRunControl(MultiOutputPlugin.PluginTask task, OutputPlugin.Control control) {
@@ -36,6 +36,7 @@ class AsyncRunControl {
         this.executorService = Executors.newSingleThreadExecutor(
                 new ThreadFactoryBuilder().setNameFormat(THREAD_NAME_FORMAT).build()
         );
+        this.result = executorService.submit(new RunControl());
     }
 
     void cancel() {
@@ -53,11 +54,6 @@ class AsyncRunControl {
         } finally {
             executorService.shutdown();
         }
-    }
-
-    private AsyncRunControl start() {
-        this.result = executorService.submit(new RunControl());
-        return this;
     }
 
     private class RunControl implements Callable<List<TaskReport>> {

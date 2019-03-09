@@ -83,7 +83,7 @@ public class MultiOutputPlugin implements OutputPlugin {
         final PluginTask task = taskSource.loadTask(PluginTask.class);
         final ExecSession session = Exec.session();
         final List<TransactionalPageOutputDelegate> delegates = mapWithPluginDelegate(task, session, delegate ->
-                new TransactionalPageOutputDelegate(taskIndex, delegate, delegate.open(schema, taskIndex))
+                TransactionalPageOutputDelegate.open(schema, taskIndex, delegate)
         );
 
         return new TransactionalPageOutput() {

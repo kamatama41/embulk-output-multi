@@ -28,7 +28,7 @@ org.apache.bval:bval-core:0.5
 org.apache.bval:bval-jsr303:0.5
 org.apache.commons:commons-lang3:3.4
 org.apache.velocity:velocity:1.7
-org.embulk:embulk-core:0.9.15
+org.embulk:embulk-core:0.9.16
 org.jruby:jruby-complete:9.1.15.0
 org.msgpack:msgpack-core:0.8.11
 org.slf4j:slf4j-api:1.7.12

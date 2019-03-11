@@ -46,7 +46,7 @@ public class MultiOutputPlugin implements OutputPlugin {
     public ConfigDiff transaction(ConfigSource config, Schema schema, int taskCount, OutputPlugin.Control control) {
         final PluginTask task = config.loadConfig(PluginTask.class);
         if (task.getOutputConfigs().isEmpty()) {
-            throw new ConfigException("'outputs' must have more than than or equals to 1 element.");
+            throw new ConfigException("'outputs' must have more than or equals to 1 element.");
         }
         final ExecSession session = Exec.session();
         final AsyncRunControl runControl = AsyncRunControl.start(task, control);

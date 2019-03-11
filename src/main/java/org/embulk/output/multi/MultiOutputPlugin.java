@@ -9,11 +9,9 @@ import org.embulk.config.Task;
 import org.embulk.config.TaskReport;
 import org.embulk.config.TaskSource;
 import org.embulk.plugin.PluginType;
-import org.embulk.spi.Buffer;
 import org.embulk.spi.Exec;
 import org.embulk.spi.ExecSession;
 import org.embulk.spi.OutputPlugin;
-import org.embulk.spi.Page;
 import org.embulk.spi.Schema;
 import org.embulk.spi.TransactionalPageOutput;
 import org.slf4j.Logger;
@@ -26,7 +24,6 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ExecutionException;
 import java.util.function.Function;
-import java.util.stream.Collectors;
 
 public class MultiOutputPlugin implements OutputPlugin {
     public interface PluginTask extends Task {
@@ -82,70 +79,7 @@ public class MultiOutputPlugin implements OutputPlugin {
     public TransactionalPageOutput open(TaskSource taskSource, Schema schema, int taskIndex) {
         final PluginTask task = taskSource.loadTask(PluginTask.class);
         final ExecSession session = Exec.session();
-        final List<TransactionalPageOutputDelegate> delegates = mapWithPluginDelegate(task, session, delegate ->
-                TransactionalPageOutputDelegate.open(schema, taskIndex, delegate)
-        );
-
-        return new TransactionalPageOutput() {
-            @Override
-            public void add(Page original) {
-                final Buffer originalBuffer = original.buffer();
-                for (TransactionalPageOutputDelegate output : delegates) {
-                    final Buffer copiedBuffer = Buffer.wrap(originalBuffer.array());
-                    copiedBuffer.offset(originalBuffer.offset());
-                    copiedBuffer.limit(originalBuffer.limit());
-
-                    final Page copiedPage = Page.wrap(copiedBuffer);
-                    copiedPage.setStringReferences(new ArrayList<>(original.getStringReferences()));
-                    copiedPage.setValueReferences(new ArrayList<>(original.getValueReferences()));
-
-                    output.add(copiedPage);
-                }
-            }
-
-            @Override
-            public void finish() {
-                for (TransactionalPageOutputDelegate output : delegates) {
-                    output.finish();
-                }
-            }
-
-            @Override
-            public void close() {
-                for (TransactionalPageOutputDelegate output : delegates) {
-                    output.close();
-                }
-            }
-
-            @Override
-            public void abort() {
-                for (TransactionalPageOutputDelegate output : delegates) {
-                    output.abort();
-                }
-            }
-
-            @Override
-            public TaskReport commit() {
-                final TaskReport report = Exec.newTaskReport();
-                final Map<String, TaskReport> reports = new HashMap<>();
-                final List<OutputPluginDelegate> errorPlugins = new ArrayList<>();
-                for (TransactionalPageOutputDelegate output : delegates) {
-                    try {
-                        reports.put(output.getTag(), output.commit());
-                    } catch (PluginExecutionException e) {
-                        errorPlugins.add(e.getPlugin());
-                    }
-                }
-                if (!errorPlugins.isEmpty()) {
-                    throw new RuntimeException(
-                            String.format("Following plugins failed to output [%s]",
-                                    errorPlugins.stream().map(OutputPluginDelegate::getTag).collect(Collectors.joining(", "))
-                            ));
-                }
-                report.set(CONFIG_NAME_OUTPUT_TASK_REPORTS, new TaskReports(reports));
-                return report;
-            }
-        };
+        return MultiTransactionalPageOutput.open(schema, taskIndex, mapWithPluginDelegate(task, session, Function.identity()));
     }
 
     private static ConfigDiff buildConfigDiff(List<OutputPluginDelegate.Transaction> transactions) {

@@ -38,6 +38,7 @@ public class MultiTransactionalPageOutput implements TransactionalPageOutput {
     @Override
     public void add(Page page) {
         applyToAllPlugins(delegate -> delegate.add(copyPage(page)));
+        page.release();
     }
 
     @Override

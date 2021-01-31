@@ -4,7 +4,7 @@ This plugin copies an output to multiple destinations.
 
 ### Notes
 - It's still very experimental version, so might change its configuration names or styles without notification. 
-- As this plugin peform multiple output methods, it might have a performance issue with large records.
+- As this plugin performs multiple output methods, it might have a performance issue with large records.
 - It might not work on other executors than LocalExecutor.
 - I would appreciate it if you use this and give me reports/feedback!
 

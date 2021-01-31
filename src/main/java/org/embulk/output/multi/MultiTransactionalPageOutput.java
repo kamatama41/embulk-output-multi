@@ -87,8 +87,7 @@ public class MultiTransactionalPageOutput implements TransactionalPageOutput {
 
     private static Page copyPage(Page original) {
         final Buffer originalBuffer = original.buffer();
-        final Buffer copiedBuffer = Buffer.wrap(originalBuffer.array());
-        copiedBuffer.offset(originalBuffer.offset());
+        final Buffer copiedBuffer = Buffer.wrap(originalBuffer.array(), originalBuffer.offset(), originalBuffer.capacity());
         copiedBuffer.limit(originalBuffer.limit());
 
         final Page copiedPage = Page.wrap(copiedBuffer);
